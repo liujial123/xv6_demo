@@ -127,11 +127,8 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
-
-  // Zero initializes the tracemask for a new process << 新的进程默认不追踪sys calls
+  // Zero initializes the tracemask for a new process
   p->tracemask = 0;
-
-  
   return p;
 }
 
@@ -272,9 +269,8 @@ fork(void)
     return -1;
   }
 
-
-    // inherit parent's trace mask << fork出的新进程继承父进程的bit mask
-    np->tracemask = p->tracemask;
+  // inherit parent's trace mask
+  np->tracemask = p->tracemask;
 
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
@@ -701,4 +697,19 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// Count how many processes are not in the state of UNUSED
+uint64
+count_free_proc(void) {
+  struct proc *p;
+  uint64 count = 0;
+  for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if(p->state != UNUSED) {
+      count += 1;
+    }
+    release(&p->lock);
+  }
+  return count;
 }

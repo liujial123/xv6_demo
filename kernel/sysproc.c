@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -107,5 +108,22 @@ sys_trace(void) {
     return -1;
   myproc()->tracemask = trace_sys_mask;
   //myproc()->tracemask |= trace_sys_mask;//原本
+  return 0;
+}
+
+// collect system info
+uint64
+sys_sysinfo(void) {
+  struct proc *my_proc = myproc();
+  uint64 p;
+  if(argaddr(0, &p) < 0) // 获取用户提供的buffer地址
+    return -1;
+  // construct in kernel first 在内核态先构造出这个sysinfo struct
+  struct sysinfo s;
+  s.freemem = kfreemem();
+  s.nproc = count_free_proc();
+  // copy to user space // 把这个struct复制到用户态地址里去
+  if(copyout(my_proc->pagetable, p, (char *)&s, sizeof(s)) < 0)
+    return -1;
   return 0;
 }

@@ -1,5 +1,8 @@
+
 struct stat;
 struct rtcdate;
+
+struct sysinfo;//sysinfo
 
 // system calls
 int fork(void);
@@ -24,6 +27,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int trace(int);  // 新系统调用trace的函数原型签名
+int sysinfo(struct sysinfo *);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -41,5 +45,3 @@ void free(void*);
 int atoi(const char*);
 int memcmp(const void *, const void *, uint);
 void *memcpy(void *, const void *, uint);
-
-
