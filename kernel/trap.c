@@ -36,7 +36,7 @@ trapinithart(void)
 void
 usertrap(void)
 {
-  int which_dev = 0;
+  int which_dev = devintr();
 
   if((r_sstatus() & SSTATUS_SPP) != 0)
     panic("usertrap: not from user mode");
@@ -67,20 +67,38 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if (r_scause() == 13 || r_scause() == 15) {
+    // 13 is read page fault, 15 is write page fault
+    if (lazyvalidate(p, r_stval()) != 0) {
+      p->killed = 1;
+      goto killed;
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
+    goto killed;
   }
 
-  if(p->killed)
-    exit(-1);
-
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
-    yield();
+  if(which_dev == 2) {
+      p->ticks_since_last_alarm += 1;
+      if (p->inalarm == 0 && p->alarm_period != 0 && p->ticks_since_last_alarm == p->alarm_period) {
+        p->inalarm = 1;
+        *p->alarmframe = *p->trapframe;
+        // save all the trapframe to alarmframe for later restore
+        // jump to the alarm handler when returning back to user space
+        p->trapframe->epc = (uint64)p->alarm_handler;
+      }
+      yield();
+  }
 
   usertrapret();
+  return;
+
+killed:
+  if (p->killed)
+    exit(-1);
 }
 
 //
@@ -108,7 +126,6 @@ usertrapret(void)
 
   // set up the registers that trampoline.S's sret will use
   // to get to user space.
-  
   // set S Previous Privilege mode to User.
   unsigned long x = r_sstatus();
   x &= ~SSTATUS_SPP; // clear SPP to 0 for user mode
@@ -137,13 +154,16 @@ kerneltrap()
   uint64 sepc = r_sepc();
   uint64 sstatus = r_sstatus();
   uint64 scause = r_scause();
-  
+
   if((sstatus & SSTATUS_SPP) == 0)
     panic("kerneltrap: not from supervisor mode");
   if(intr_get() != 0)
     panic("kerneltrap: interrupts enabled");
 
-  if((which_dev = devintr()) == 0){
+  if (scause == 13 || scause == 15) {
+    lazyvalidate(myproc(), r_stval());
+  } else if((which_dev = devintr()) == 0) {
+    printf("the faulting process is pid=%d\n", myproc()->pid);
     printf("scause %p\n", scause);
     printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
     panic("kerneltrap");
@@ -217,4 +237,3 @@ devintr()
     return 0;
   }
 }
-
